@@ -1,0 +1,9 @@
+{
+  "name": "kno-store-api",
+  "version": "1.0.0",
+  "description": "Kno Driver Store — Serverless API (Vercel)",
+  "dependencies": {
+    "@vercel/kv": "^1.0.0",
+    "stripe": "^14.0.0"
+  }
+}
