@@ -1,11 +1,4 @@
 const { fetchRegistry } = require('../lib/github');
-const { hasPurchased }  = require('../lib/db');
-
-/**
- * api/catalog.js
- * Retourne le catalogue des drivers depuis le registry local.
- * Plus rapide, pas de dépendance GitHub token.
- */
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -15,7 +8,7 @@ module.exports = async (req, res) => {
   if (req.method !== 'GET')    return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    const registry = require('../registry.json');
+    const registry = await fetchRegistry();
     res.json(registry);
   } catch(e) {
     console.error('[catalog]', e.message);
