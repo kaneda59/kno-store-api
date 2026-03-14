@@ -1,13 +1,13 @@
 const Stripe          = require('stripe');
 const { savePurchase } = require('../lib/db');
 
-// Vercel : désactiver le bodyParser pour recevoir le raw body Stripe
-export const config = { api: { bodyParser: false } };
+// Désactiver le bodyParser Vercel pour recevoir le raw body Stripe
+module.exports.config = { api: { bodyParser: false } };
 
 async function getRawBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
-    req.on('data', c => chunks.push(c));
+    req.on('data', c => chunks.push(typeof c === 'string' ? Buffer.from(c) : c));
     req.on('end',  () => resolve(Buffer.concat(chunks)));
     req.on('error', reject);
   });
@@ -18,7 +18,13 @@ module.exports = async (req, res) => {
 
   const stripe = Stripe(process.env.STRIPE_SECRET);
   const sig    = req.headers['stripe-signature'];
-  const body   = await getRawBody(req);
+
+  let body;
+  try {
+    body = await getRawBody(req);
+  } catch(e) {
+    return res.status(400).send('Could not read body');
+  }
 
   let event;
   try {

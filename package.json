@@ -1,9 +1,9 @@
 {
   "name": "kno-store-api",
   "version": "1.0.0",
-  "description": "Kno Driver Store — Serverless API (Vercel)",
+  "description": "Kno Driver Store — Serverless API (Vercel + Upstash)",
   "dependencies": {
-    "@vercel/kv": "^1.0.0",
+    "@upstash/redis": "^1.28.0",
     "stripe": "^14.0.0"
   }
 }
