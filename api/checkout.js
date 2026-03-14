@@ -1,7 +1,5 @@
 const Stripe = require('stripe');
 
-module.exports.config = { api: { bodyParser: false } };
-
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let data = '';
@@ -11,7 +9,7 @@ function readBody(req) {
   });
 }
 
-module.exports = async (req, res) => {
+const handler = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -25,13 +23,14 @@ module.exports = async (req, res) => {
   if (!driver_id) return res.status(400).json({ error: 'driver_id required' });
 
   try {
-    const registry = require('../registry.json');
+    const { fetchRegistry } = require('../lib/github');
+    const registry = await fetchRegistry();
     const driver   = (registry.drivers || []).find(d => d.id === driver_id);
-    if (!driver)      return res.status(404).json({ error: 'Driver not found' });
-    if (driver.free)  return res.status(400).json({ error: 'Driver is free, no checkout needed' });
+    if (!driver)     return res.status(404).json({ error: 'Driver not found' });
+    if (driver.free) return res.status(400).json({ error: 'Driver is free, no checkout needed' });
 
-    const stripe     = Stripe(process.env.STRIPE_SECRET);
-    const storeUrl   = process.env.STORE_URL || 'https://kno.fdevelopment.eu/kno/store.html';
+    const stripe   = Stripe(process.env.STRIPE_SECRET);
+    const storeUrl = process.env.STORE_URL || 'https://kno.fdevelopment.eu/kno/store.html';
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
@@ -58,3 +57,6 @@ module.exports = async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 };
+
+handler.config = { api: { bodyParser: false } };
+module.exports = handler;
