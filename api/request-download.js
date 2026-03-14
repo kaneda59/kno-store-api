@@ -1,5 +1,8 @@
 const { hasPurchasedBySession, createDownloadToken } = require('../lib/db');
 
+// Drivers gratuits — pas besoin de vérifier GitHub
+const FREE_DRIVERS = ['driver_json_folder'];
+
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let data = '';
@@ -16,22 +19,20 @@ const handler = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST')   return res.status(405).json({ error: 'Method not allowed' });
 
-  const body      = await readBody(req);
-  const driver_id = body.driver_id;
+  const body       = await readBody(req);
+  const driver_id  = body.driver_id;
   const session_id = body.session_id;
 
   if (!driver_id) return res.status(400).json({ error: 'driver_id requis.' });
 
   try {
-    const { fetchRegistry } = require('../lib/github');
-    const registry = await fetchRegistry();
-    const driver   = (registry.drivers || []).find(d => d.id === driver_id);
-    if (!driver) return res.status(404).json({ error: `Driver '${driver_id}' introuvable.` });
-
     let authorized = false;
-    if (driver.free) {
+
+    if (FREE_DRIVERS.includes(driver_id)) {
+      // Driver gratuit → toujours autorisé
       authorized = true;
     } else if (session_id) {
+      // Driver payant → vérifier l'achat Stripe dans Redis
       authorized = await hasPurchasedBySession(session_id, driver_id);
     }
 
