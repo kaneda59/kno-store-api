@@ -1,22 +1,21 @@
 const { fetchRegistry } = require('../lib/github');
 const { hasPurchased }  = require('../lib/db');
 
+/**
+ * api/catalog.js
+ * Retourne le catalogue des drivers depuis le registry local.
+ * Plus rapide, pas de dépendance GitHub token.
+ */
+
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'GET')    return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    const registry    = await fetchRegistry();
-    const license_key = req.query.license_key;
-
-    if (license_key) {
-      // Enrichir avec le statut d'achat
-      for (const driver of registry.drivers) {
-        driver.purchased = driver.free || await hasPurchased(license_key, driver.id);
-      }
-    }
+    const registry = require('../registry.json');
     res.json(registry);
   } catch(e) {
     console.error('[catalog]', e.message);
