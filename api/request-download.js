@@ -1,7 +1,15 @@
+const crypto = require('crypto');
 const { hasPurchasedBySession, createDownloadToken } = require('../lib/db');
 
-// Drivers gratuits — pas besoin de vérifier GitHub
-const FREE_DRIVERS = ['driver_json_folder'];
+const FREE_DRIVERS  = ['driver_json_folder'];
+const TOKEN_SECRET  = process.env.TOKEN_SECRET || 'kno-store-token-secret-2026';
+
+// ── Token sans Redis pour les drivers gratuits ───────────────────────────────
+function createFreeToken(driver_id) {
+  const payload = Buffer.from(JSON.stringify({ driver_id, free: true, ts: Date.now() })).toString('base64url');
+  const sig     = crypto.createHmac('sha256', TOKEN_SECRET).update(payload).digest('hex').slice(0, 16);
+  return `free.${payload}.${sig}`;
+}
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -26,22 +34,22 @@ const handler = async (req, res) => {
   if (!driver_id) return res.status(400).json({ error: 'driver_id requis.' });
 
   try {
-    let authorized = false;
-
     if (FREE_DRIVERS.includes(driver_id)) {
-      // Driver gratuit → toujours autorisé
-      authorized = true;
-    } else if (session_id) {
-      // Driver payant → vérifier l'achat Stripe dans Redis
-      authorized = await hasPurchasedBySession(session_id, driver_id);
+      // Driver gratuit → token autonome, pas de Redis
+      const token = createFreeToken(driver_id);
+      return res.json({ token, driver_id, expires_in: 3600 });
     }
 
-    if (!authorized) {
+    if (!session_id) {
       return res.status(403).json({ error: 'Non autorisé.', checkout_needed: true });
     }
 
-    const tokenKey = session_id || `free_${driver_id}_${Date.now()}`;
-    const token    = await createDownloadToken(tokenKey, driver_id);
+    const authorized = await hasPurchasedBySession(session_id, driver_id);
+    if (!authorized) {
+      return res.status(403).json({ error: 'Achat non trouvé.', checkout_needed: true });
+    }
+
+    const token = await createDownloadToken(session_id, driver_id);
     return res.json({ token, driver_id, expires_in: 3600 });
 
   } catch(e) {
