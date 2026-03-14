@@ -1,14 +1,14 @@
-const Stripe          = require('stripe');
-const { savePurchase } = require('../lib/db');
+const Stripe = require('stripe');
+const { recordPurchase } = require('../lib/db');
 
-// Désactiver le bodyParser Vercel pour recevoir le raw body Stripe
+// Webhook Stripe — pas de body parser (besoin du raw body pour vérifier la signature)
 module.exports.config = { api: { bodyParser: false } };
 
-async function getRawBody(req) {
+function readRawBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
-    req.on('data', c => chunks.push(typeof c === 'string' ? Buffer.from(c) : c));
-    req.on('end',  () => resolve(Buffer.concat(chunks)));
+    req.on('data', chunk => chunks.push(chunk));
+    req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', reject);
   });
 }
@@ -16,40 +16,27 @@ async function getRawBody(req) {
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).end();
 
-  const stripe = Stripe(process.env.STRIPE_SECRET);
-  const sig    = req.headers['stripe-signature'];
-
-  let body;
-  try {
-    body = await getRawBody(req);
-  } catch(e) {
-    return res.status(400).send('Could not read body');
-  }
+  const stripe    = Stripe(process.env.STRIPE_SECRET);
+  const rawBody   = await readRawBody(req);
+  const signature = req.headers['stripe-signature'];
 
   let event;
   try {
-    event = stripe.webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK);
+    event = stripe.webhooks.constructEvent(rawBody, signature, process.env.STRIPE_WEBHOOK);
   } catch(e) {
-    console.error('[webhook] Signature invalide:', e.message);
-    return res.status(400).send(`Webhook error: ${e.message}`);
+    console.error('[webhook] signature error:', e.message);
+    return res.status(400).json({ error: `Webhook error: ${e.message}` });
   }
 
   if (event.type === 'checkout.session.completed') {
     const session   = event.data.object;
     const driver_id = session.metadata?.driver_id;
-    const lic       = session.metadata?.license_key;
-    const email     = session.customer_details?.email;
-    const amount    = (session.amount_total || 0) / 100;
+    const sid       = session.id;  // cs_live_xxx ou cs_test_xxx
 
-    if (driver_id && lic) {
-      await savePurchase({
-        license_key: lic,
-        driver_id,
-        stripe_pi:  session.payment_intent,
-        email,
-        amount_eur: amount,
-      });
-      console.log(`[webhook] Achat enregistré: ${driver_id} pour ${lic} (${email})`);
+    if (driver_id && sid) {
+      // Stocker l'achat avec session_id comme clé (pas besoin de license_key)
+      await recordPurchase(sid, driver_id);
+      console.log(`[webhook] Purchase recorded: session=${sid} driver=${driver_id}`);
     }
   }
 
